@@ -13,18 +13,16 @@ class RateLimiter:
     def is_allowed(self, key: str) -> bool:
         now = time.time()
         cutoff = now - self.window_sec
+        member = f"{now:.6f}-{uuid.uuid4().hex}"
 
         with self.redis.pipeline(transaction=True) as pipe:
             pipe.zremrangebyscore(key, 0, cutoff)
             pipe.zcard(key)
-            _, count = pipe.execute()
+            pipe.zadd(key, {member: now})
+            pipe.expire(key, self.window_sec + 1)
+            _, count, _, _ = pipe.execute()
 
-        if count < self.max_requests:
-            member = f"{now:.6f}-{id(self)}-{uuid.uuid4().hex[:6]}"
-            self.redis.zadd(key, {member: now})
-            self.redis.expire(key, self.window_sec + 1)
-            return True
-        return False
+        return count < self.max_requests
 
     def remaining(self, key: str) -> int:
         now = time.time()

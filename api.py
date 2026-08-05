@@ -69,8 +69,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=["http://localhost:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -189,20 +188,20 @@ async def new_session(request: Request = None):
 
 
 @app.get("/sessions/{session_id}", response_model=SessionResponse)
-async def get_session(session_id: str):
+async def get_session(session_id: str, current_user: User = Depends(get_current_user)):
     from session_manager import get_history, get_session_user
     owner = get_session_user(session_id)
-    if not owner:
+    if not owner or owner != current_user.username:
         raise HTTPException(status_code=404, detail="Session not found")
     messages = get_history(session_id)
     return {"session_id": session_id, "messages": [ChatMessage(**m) for m in messages] if messages else []}
 
 
 @app.delete("/sessions/{session_id}")
-async def delete_session(session_id: str):
+async def delete_session(session_id: str, current_user: User = Depends(get_current_user)):
     from session_manager import delete_session, get_session_user
     owner = get_session_user(session_id)
-    if not owner:
+    if not owner or owner != current_user.username:
         raise HTTPException(status_code=404, detail="Session not found")
     delete_session(session_id)
     return {"status": "deleted"}
@@ -281,7 +280,7 @@ async def websocket_result(websocket: WebSocket, task_id: str, token: str = ""):
                 break
 
     except WebSocketDisconnect:
-        logger.info("WS disconnected: task_id=%s user=%s", task_id, username)
+        logger.info("WS disconnected: task_id=%s", task_id)
     finally:
         pass
 
@@ -386,33 +385,34 @@ async def evaluator_history():
         from config import DATABASE_URL
 
         engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, pool_size=1)
-        factory = async_sessionmaker(engine, expire_on_commit=False)
-
-        async with factory() as db:
-            result = await db.execute(
-                select(EvaluationRecord).order_by(desc(EvaluationRecord.created_at)).limit(50)
-            )
-            records = result.scalars().all()
-            evaluations = [
-                {
-                    "id": r.id,
-                    "repo": r.repo_full_name,
-                    "url": r.repo_url,
-                    "score": r.weighted_total or 0.0,
-                    "positioning": r.score_positioning or 0,
-                    "differentiation": r.score_differentiation or 0,
-                    "moat": r.score_moat or 0,
-                    "engineering": r.score_engineering or 0,
-                    "sustainability": r.score_sustainability or 0,
-                    "summary": r.overall_summary or "",
-                    "strengths": r.top_strengths or "",
-                    "weaknesses": r.top_weaknesses or "",
-                    "evaluated_at": str(r.created_at) if r.created_at else "",
-                }
-                for r in records
-            ]
-        await engine.dispose()
-        return {"evaluations": evaluations}
+        try:
+            factory = async_sessionmaker(engine, expire_on_commit=False)
+            async with factory() as db:
+                result = await db.execute(
+                    select(EvaluationRecord).order_by(desc(EvaluationRecord.created_at)).limit(50)
+                )
+                records = result.scalars().all()
+                evaluations = [
+                    {
+                        "id": r.id,
+                        "repo": r.repo_full_name,
+                        "url": r.repo_url,
+                        "score": r.weighted_total or 0.0,
+                        "positioning": r.score_positioning or 0,
+                        "differentiation": r.score_differentiation or 0,
+                        "moat": r.score_moat or 0,
+                        "engineering": r.score_engineering or 0,
+                        "sustainability": r.score_sustainability or 0,
+                        "summary": r.overall_summary or "",
+                        "strengths": r.top_strengths or "",
+                        "weaknesses": r.top_weaknesses or "",
+                        "evaluated_at": str(r.created_at) if r.created_at else "",
+                    }
+                    for r in records
+                ]
+            return {"evaluations": evaluations}
+        finally:
+            await engine.dispose()
     except Exception as e:
         logger.warning("History query failed: %s", e)
         return {"evaluations": []}
@@ -487,14 +487,14 @@ async def settings_llm_test(data: dict):
     if not base_url or not api_key:
         raise HTTPException(status_code=400, detail="base_url and api_key are required")
     try:
-        resp = httpx.post(
-            f"{base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5},
-            timeout=15,
-        )
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5},
+            )
         if resp.status_code == 200:
-            return {"status": "ok", "message": "连接成功 ✓"}
+            return {"status": "ok", "message": "连接成功"}
         return {"status": "error", "message": f"HTTP {resp.status_code}: {resp.text[:200]}"}
     except Exception as e:
         return {"status": "error", "message": str(e)[:200]}

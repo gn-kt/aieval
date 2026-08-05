@@ -20,8 +20,8 @@ async def get_current_user(
         logger.warning("Auth rejected: invalid or expired token")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     username = payload.get("sub")
-    if username is None:
-        logger.warning("Auth rejected: token missing 'sub' claim")
+    if not isinstance(username, str) or not username:
+        logger.warning("Auth rejected: token 'sub' claim is missing or invalid")
         raise HTTPException(status_code=401, detail="Invalid token payload")
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()

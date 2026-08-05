@@ -5,7 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/backend_dev")
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-in-production")
+_key = os.getenv("SECRET_KEY", "")
+if not _key:
+    raise RuntimeError("SECRET_KEY environment variable is required")
+SECRET_KEY: str = _key
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = 60
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")

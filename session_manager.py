@@ -20,16 +20,23 @@ def create_session(user: str) -> str:
 
 def add_message(session_id: str, role: str, content: str) -> None:
     redis = get_redis()
-    redis.rpush(_key(session_id), json.dumps({"role": role, "content": content}))
-    redis.expire(_key(session_id), SESSION_TTL)
+    msg_key = _key(session_id)
+    with redis.pipeline(transaction=True) as pipe:
+        pipe.rpush(msg_key, json.dumps({"role": role, "content": content}))
+        pipe.expire(msg_key, SESSION_TTL)
+        pipe.ltrim(msg_key, -(HISTORY_MAX * 2), -1)
+        pipe.execute()
 
 
 def get_history(session_id: str, max_turns: int = HISTORY_MAX) -> list[dict]:
     redis = get_redis()
     raw = redis.lrange(_key(session_id), 0, -1)
-    messages = [json.loads(m) for m in raw]
-    if len(messages) > max_turns * 2:
-        messages = messages[-(max_turns * 2):]
+    messages = []
+    for m in raw:
+        try:
+            messages.append(json.loads(m))
+        except (TypeError, ValueError):
+            continue
     return messages
 
 

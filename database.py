@@ -29,9 +29,13 @@ async def get_db():
 
 
 async def init_db():
-    import os
-
     from alembic import command
     from alembic.config import Config
+    import asyncio
     alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
-    command.upgrade(alembic_cfg, "head")
+    try:
+        await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("Alembic migration failed: %s", e)
+        raise

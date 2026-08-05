@@ -15,6 +15,7 @@ celery_app = Celery(
 
 if _IS_TESTING:
     celery_app.conf.broker_url = "memory://"
+    celery_app.conf.result_backend = "cache+memory://"
     celery_app.conf.task_always_eager = True
     celery_app.conf.task_store_eager_result = True
     celery_app.conf.task_serializer = "json"

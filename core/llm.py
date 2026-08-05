@@ -36,18 +36,15 @@ class LLMError(RuntimeError):
 
 def _get_active_config() -> dict:
     try:
-        import asyncio
-
         from models import LLMConfig
-        from sqlalchemy import select
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy import create_engine as _sync_engine, select
+        from sqlalchemy.orm import Session
 
-        engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, pool_size=1)
-        factory = async_sessionmaker(engine, expire_on_commit=False)
-
-        async def _fetch():
-            async with factory() as db:
-                result = await db.execute(
+        sync_url = DATABASE_URL.replace("+asyncpg", "+psycopg2")
+        engine = _sync_engine(sync_url, pool_pre_ping=True, pool_size=1)
+        try:
+            with Session(engine) as db:
+                result = db.execute(
                     select(LLMConfig).where(LLMConfig.is_active == True).limit(1)
                 )
                 row = result.scalar_one_or_none()
@@ -59,9 +56,8 @@ def _get_active_config() -> dict:
                         "provider": row.provider,
                     }
                 return {}
-            await engine.dispose()
-
-        return asyncio.run(_fetch())
+        finally:
+            engine.dispose()
     except Exception:
         return {}
 
