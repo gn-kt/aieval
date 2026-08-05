@@ -16,3 +16,9 @@ frontend/dist/
 frontend/node_modules/
 
 test_data/
+
+# Redis
+dump.rdb
+
+# TypeScript 编译缓存
+*.tsbuildinfo
