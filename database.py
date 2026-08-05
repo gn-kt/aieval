@@ -29,9 +29,10 @@ async def get_db():
 
 
 async def init_db():
+    import asyncio
+
     from alembic import command
     from alembic.config import Config
-    import asyncio
     alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
     try:
         await asyncio.to_thread(command.upgrade, alembic_cfg, "head")

@@ -37,7 +37,8 @@ class LLMError(RuntimeError):
 def _get_active_config() -> dict:
     try:
         from models import LLMConfig
-        from sqlalchemy import create_engine as _sync_engine, select
+        from sqlalchemy import create_engine as _sync_engine
+        from sqlalchemy import select
         from sqlalchemy.orm import Session
 
         sync_url = DATABASE_URL.replace("+asyncpg", "+psycopg2")

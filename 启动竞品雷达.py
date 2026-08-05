@@ -9,7 +9,6 @@ Ctrl+C 关闭所有服务
 
 import os
 import subprocess
-import sys
 import time
 import webbrowser
 from pathlib import Path
