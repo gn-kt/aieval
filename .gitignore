@@ -1,0 +1,13 @@
+.env
+__pycache__/
+data/
+.vscode/
+logs/
+
+# 数据库缓存
+*.db
+
+# 登录凭据
+*_auth.json
+
+frontend/dist/

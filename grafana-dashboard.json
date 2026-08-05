@@ -1,0 +1,78 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 0,
+  "id": null,
+  "panels": [
+    {
+      "title": "HTTP Requests / sec",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total[1m])",
+          "legendFormat": "{{method}} {{handler}}"
+        }
+      ]
+    },
+    {
+      "title": "Request Latency (p50/p95/p99)",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[1m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[1m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[1m]))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "title": "Tasks Created",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(rag_task_created_total[1m])",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "title": "Active WebSocket Connections",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rag_ws_connections_active"
+        }
+      ]
+    },
+    {
+      "title": "In-flight Requests",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rag_http_requests_inprogress"
+        }
+      ]
+    },
+    {
+      "title": "HTTP Status Codes",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{handler!=\"/metrics\"}[1m])",
+          "legendFormat": "{{method}} {{handler}} → {{status}}"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 27,
+  "title": "RAG Backend Dashboard",
+  "uid": "rag-backend-monitor"
+}
