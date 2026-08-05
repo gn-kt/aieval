@@ -1,6 +1,6 @@
 import os
 
-from celery import Celery, signals
+from celery import Celery
 
 from config import REDIS_URL
 
@@ -12,12 +12,6 @@ celery_app = Celery(
     backend=REDIS_URL,
     include=["tasks"],
 )
-
-if not _IS_TESTING:
-    @signals.worker_process_init.connect
-    def _setup_celery_tracing(**kwargs):
-        from tracing import init_celery_tracing
-        init_celery_tracing()
 
 if _IS_TESTING:
     celery_app.conf.broker_url = "memory://"

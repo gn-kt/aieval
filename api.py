@@ -3,11 +3,10 @@ import math
 import time
 from contextlib import asynccontextmanager
 
-import metrics
 from auth import authenticate_user, create_access_token, create_user
 from celery.result import AsyncResult
 from celery_app import celery_app
-from database import engine, get_db, init_db
+from database import get_db, init_db
 from fastapi import (
     Depends,
     FastAPI,
@@ -18,12 +17,10 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from logger import get_logger, setup_logging
 from middleware import get_current_user
 from models import User
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import ValidationError
 from rate_limiter import RateLimiter
 from redis_client import get_redis
@@ -47,12 +44,6 @@ from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from tasks import run_evaluation, run_rag_query, run_text_evaluation
-from tracing import (
-    init_tracing,
-    instrument_celery,
-    instrument_fastapi,
-    instrument_sqlalchemy,
-)
 
 logger = get_logger(__name__)
 
@@ -60,10 +51,6 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    init_tracing()
-    instrument_fastapi(app)
-    instrument_sqlalchemy(engine)
-    instrument_celery(celery_app)
     await init_db()
     redis_client = get_redis()
     app.state.redis = redis_client
@@ -91,15 +78,6 @@ app.add_middleware(
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
-
-instrumentator = Instrumentator(
-    should_group_status_codes=False,
-    should_ignore_untemplated=True,
-    should_instrument_requests_inprogress=True,
-    inprogress_name="rag_http_requests_inprogress",
-    inprogress_labels=True,
-)
-instrumentator.instrument(app)
 
 
 @app.middleware("http")
@@ -143,11 +121,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"error": {"code": "INTERNAL_ERROR", "message": "Internal server error", "details": None}},
     )
-
-
-@app.get("/metrics")
-async def metrics_endpoint():
-    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/register", response_model=UserResponse)
@@ -203,8 +176,6 @@ async def ask(
         "user": client_ip,
     })
 
-    metrics.task_created_total.labels(status="queued").inc()
-    logger.info("Celery task created: task_id=%s question=%s", task_id, question[:50])
     return {"task_id": task_id, "status": "queued", "rate_limit_remaining": remaining}
 
 
@@ -288,7 +259,6 @@ async def list_tasks(
 @app.websocket("/ws/{task_id}")
 async def websocket_result(websocket: WebSocket, task_id: str, token: str = ""):
     await websocket.accept()
-    metrics.active_websocket_connections.inc()
     logger.info("WS connected: task_id=%s", task_id)
 
     try:
@@ -313,14 +283,14 @@ async def websocket_result(websocket: WebSocket, task_id: str, token: str = ""):
     except WebSocketDisconnect:
         logger.info("WS disconnected: task_id=%s user=%s", task_id, username)
     finally:
-        metrics.active_websocket_connections.dec()
+        pass
 
 
 @app.get("/stats")
 async def stats():
     redis_client = get_redis()
     task_count = redis_client.zcard("rag:task_history") or 0
-    ws_active = metrics.active_websocket_connections._value.get()
+    ws_active = 0
     return {"active_ws": int(ws_active), "task_count": int(task_count)}
 
 
@@ -341,7 +311,6 @@ async def evaluator_analyze(
         "user": "anon",
     })
 
-    metrics.task_created_total.labels(status="queued").inc()
     logger.info("Evaluation task created: task_id=%s repo=%s",
                   task_id, req.repo_url)
     return {"task_id": task_id, "status": "queued"}
@@ -362,7 +331,6 @@ async def evaluator_analyze_text(
         "created_at": str(int(time.time())),
         "user": "anon",
     })
-    metrics.task_created_total.labels(status="queued").inc()
     logger.info("Text evaluation task created: task_id=%s", task_id)
     return {"task_id": task_id, "status": "queued"}
 
