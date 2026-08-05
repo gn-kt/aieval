@@ -64,9 +64,6 @@ def _get_active_config() -> dict:
 
 
 def _get_chat_config() -> tuple[str, str, str]:
-    cfg = _get_active_config()
-    if cfg:
-        return cfg["api_key"], cfg["base_url"], cfg["model"]
     return _get_api_key(), DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
 
 
