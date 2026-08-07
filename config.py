@@ -4,13 +4,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+LLM_CHAT_URL = os.getenv("LLM_CHAT_URL", "")
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/backend_dev")
-_key = os.getenv("SECRET_KEY", "")
-if not _key:
-    raise RuntimeError("SECRET_KEY environment variable is required")
-SECRET_KEY: str = _key
-JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_MINUTES = 60
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

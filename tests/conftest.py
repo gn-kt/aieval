@@ -7,7 +7,6 @@ asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 _PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 os.environ["DATABASE_URL"] = "postgresql+asyncpg://postgres:postgres@localhost:5432/backend_test"
-os.environ["SECRET_KEY"] = "test-secret-key-for-testing"
 os.environ["TESTING"] = "1"
 os.environ["CELERY_ALWAYS_EAGER"] = "True"
 os.environ["CELERY_BROKER_URL"] = "memory://"
@@ -47,6 +46,9 @@ async def setup_database():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(lambda c: c.execute(sa.text("DROP TABLE IF EXISTS alembic_version CASCADE")))
+        await conn.run_sync(lambda c: c.execute(sa.text(
+            "DROP TABLE IF EXISTS users, usage_records, sentiment_posts, sentiment_results CASCADE"
+        )))
 
 
 @pytest_asyncio.fixture

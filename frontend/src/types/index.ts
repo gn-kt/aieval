@@ -1,77 +1,6 @@
-export interface User {
-  id: number;
-  username: string;
-  email: string;
-  api_key: string;
-  is_active: boolean;
-}
-
-export interface LoginResponse {
-  access_token: string;
-  token_type: string;
-}
-
 export interface TaskCreateResponse {
   task_id: string;
   status: string;
-  rate_limit_remaining: number | null;
-}
-
-export interface TaskStatusResponse {
-  task_id: string;
-  status: string;
-  result: string | RAGResult | null;
-}
-
-export interface RAGResult {
-  answer: string;
-  sources: SourceItem[];
-}
-
-export interface SourceItem {
-  file: string;
-  chunk: number;
-  score: number;
-}
-
-export interface TaskListItem {
-  task_id: string;
-  question: string;
-  status: string;
-  created_at: string | null;
-}
-
-export interface PaginatedTasks {
-  items: TaskListItem[];
-  total: number;
-  page: number;
-  size: number;
-  pages: number;
-}
-
-export interface ApiError {
-  error: {
-    code: string;
-    message: string;
-    details: { field: string; reason: string }[] | null;
-  };
-}
-
-export interface Stats {
-  active_ws: number;
-  task_count: number;
-  user_count: number;
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  sources?: SourceItem[];
-}
-
-export interface SessionResponse {
-  session_id: string;
-  messages: ChatMessage[];
 }
 
 export interface DimensionScore {
@@ -92,7 +21,6 @@ export interface EvaluationResult {
   suggestions: { dimension: string; issue: string; fix: string; priority: string }[];
   directions: string[];
   veto: { triggered: boolean; reason: string };
-  raw_llm_output?: string;
 }
 
 export interface ProjectMeta {

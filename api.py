@@ -1,49 +1,30 @@
-import asyncio
-import math
 import time
 from contextlib import asynccontextmanager
 
-from auth import authenticate_user, create_access_token, create_user
 from celery.result import AsyncResult
 from celery_app import celery_app
-from database import get_db, init_db
+from database import init_db
 from fastapi import (
-    Depends,
     FastAPI,
     HTTPException,
-    Query,
     Request,
-    WebSocket,
-    WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from logger import get_logger, setup_logging
-from middleware import get_current_user
-from models import User
 from pydantic import ValidationError
-from rate_limiter import RateLimiter
 from redis_client import get_redis
 from schemas import (
     AdvisorAskRequest,
     AdvisorAskResponse,
-    ChatMessage,
     EvaluateRequest,
-    LoginRequest,
-    LoginResponse,
-    PaginatedTasksResponse,
-    RegisterRequest,
-    SessionResponse,
     TaskCreateResponse,
     TextEvaluateRequest,
-    UserResponse,
 )
 from slowapi import Limiter
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from tasks import run_evaluation, run_rag_query, run_text_evaluation
+from tasks import run_evaluation, run_text_evaluation
 
 logger = get_logger(__name__)
 
@@ -54,16 +35,15 @@ async def lifespan(app: FastAPI):
     await init_db()
     redis_client = get_redis()
     app.state.redis = redis_client
-    app.state.rate_limiter = RateLimiter(redis_client, max_requests=10, window_sec=60)
     logger.info("Application started, database initialized, Redis connected")
     yield
     logger.info("Application shutting down")
 
 
 app = FastAPI(
-    title="RAG API",
-    description="Production-grade RAG backend with Celery tasks and PostgreSQL",
-    version="2.0.0",
+    title="竞品雷达",
+    description="产品竞争力评测引擎",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -84,7 +64,7 @@ async def log_requests(request: Request, call_next):
     start = time.time()
     response = await call_next(request)
     duration_ms = (time.time() - start) * 1000
-    logger.info("%s %s → %s (%.1fms)", request.method, request.url.path, response.status_code, duration_ms)
+    logger.info("%s %s -> %s (%.1fms)", request.method, request.url.path, response.status_code, duration_ms)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Response-Time"] = f"{duration_ms:.0f}ms"
@@ -122,91 +102,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-@app.post("/register", response_model=UserResponse)
-async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(User).where((User.username == req.username) | (User.email == req.email))
-    )
-    if result.scalar_one_or_none():
-        logger.warning("Registration failed: username=%s already exists", req.username)
-        raise HTTPException(status_code=400, detail="Username or email already exists")
-    user = await create_user(db, req.username, req.email, req.password)
-    logger.info("User registered: id=%s username=%s", user.id, user.username)
-    return user
-
-
-@app.post("/login", response_model=LoginResponse)
-async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
-    user = await authenticate_user(db, req.username, req.password)
-    if not user:
-        logger.warning("Login failed for username=%s", req.username)
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    token = create_access_token({"sub": user.username})
-    logger.info("User logged in: id=%s username=%s", user.id, user.username)
-    return {"access_token": token, "token_type": "bearer"}
-
-
-@app.get("/me", response_model=UserResponse)
-async def read_me(current_user: User = Depends(get_current_user)):
-    return current_user
-
-
-@app.post("/ask", response_model=TaskCreateResponse)
-@limiter.limit("5/minute")
-async def ask(
-    question: str,
-    session_id: str | None = None,
-    request: Request = None,
-):
-    client_ip = request.client.host if request and request.client else "unknown"
-    limiter: RateLimiter = request.app.state.rate_limiter
-    user_key = f"rate_limit:ip:{client_ip}"
-    if not limiter.is_allowed(user_key):
-        raise HTTPException(status_code=429, detail=f"Rate limit exceeded. Try again in {limiter.window_sec}s.")
-    celery_task = run_rag_query.delay(question, session_id)
-    task_id = celery_task.id
-    remaining = limiter.remaining(user_key)
-
-    redis_client = request.app.state.redis
-    redis_client.zadd("rag:task_history", {task_id: time.time()})
-    redis_client.hset(f"task_meta:{task_id}", mapping={
-        "question": question[:200],
-        "created_at": str(int(time.time())),
-        "user": client_ip,
-    })
-
-    return {"task_id": task_id, "status": "queued", "rate_limit_remaining": remaining}
-
-
-@app.post("/sessions/new", response_model=SessionResponse)
-async def new_session(request: Request = None):
-    from session_manager import create_session
-    client_ip = request.client.host if request and request.client else "anon"
-    sid = create_session(client_ip)
-    logger.info("Session created: id=%s", sid)
-    return {"session_id": sid, "messages": []}
-
-
-@app.get("/sessions/{session_id}", response_model=SessionResponse)
-async def get_session(session_id: str, current_user: User = Depends(get_current_user)):
-    from session_manager import get_history, get_session_user
-    owner = get_session_user(session_id)
-    if not owner or owner != current_user.username:
-        raise HTTPException(status_code=404, detail="Session not found")
-    messages = get_history(session_id)
-    return {"session_id": session_id, "messages": [ChatMessage(**m) for m in messages] if messages else []}
-
-
-@app.delete("/sessions/{session_id}")
-async def delete_session(session_id: str, current_user: User = Depends(get_current_user)):
-    from session_manager import delete_session, get_session_user
-    owner = get_session_user(session_id)
-    if not owner or owner != current_user.username:
-        raise HTTPException(status_code=404, detail="Session not found")
-    delete_session(session_id)
-    return {"status": "deleted"}
-
-
 @app.get("/result/{task_id}")
 async def get_result(task_id: str):
     task_result = AsyncResult(task_id, app=celery_app)
@@ -223,76 +118,6 @@ async def get_result(task_id: str):
     return {"task_id": task_id, "status": "done", "result": str(result_data)}
 
 
-@app.get("/tasks", response_model=PaginatedTasksResponse)
-async def list_tasks(
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
-):
-    redis_client = get_redis()
-    redis_data = []
-    task_ids = redis_client.zrevrange("rag:task_history", 0, -1)
-    for tid in task_ids:
-        meta = redis_client.hgetall(f"task_meta:{tid}")
-        task_result = AsyncResult(tid, app=celery_app)
-        redis_data.append({
-            "task_id": tid,
-            "question": meta.get("question", ""),
-            "status": task_result.state,
-            "created_at": meta.get("created_at"),
-        })
-
-    total = len(redis_data)
-    pages = math.ceil(total / size) if total > 0 else 1
-    start = (page - 1) * size
-    end = start + size
-
-    return {
-        "items": redis_data[start:end],
-        "total": total,
-        "page": page,
-        "size": size,
-        "pages": pages,
-    }
-
-
-@app.websocket("/ws/{task_id}")
-async def websocket_result(websocket: WebSocket, task_id: str, token: str = ""):
-    await websocket.accept()
-    logger.info("WS connected: task_id=%s", task_id)
-
-    try:
-        while True:
-            await asyncio.sleep(0.5)
-            await websocket.send_json({"ping": "waiting"})
-
-            task_result = AsyncResult(task_id, app=celery_app)
-            if task_result.ready():
-                result = task_result.result
-                if isinstance(result, dict):
-                    inner = result.get("result")
-                    await websocket.send_json({"task_id": task_id, "status": "completed", "result": inner})
-                else:
-                    await websocket.send_json({"task_id": task_id, "status": "completed", "result": str(result)})
-                break
-
-            if task_result.state == "FAILURE":
-                await websocket.send_json({"task_id": task_id, "status": "failed", "result": str(task_result.info)})
-                break
-
-    except WebSocketDisconnect:
-        logger.info("WS disconnected: task_id=%s", task_id)
-    finally:
-        pass
-
-
-@app.get("/stats")
-async def stats():
-    redis_client = get_redis()
-    task_count = redis_client.zcard("rag:task_history") or 0
-    ws_active = 0
-    return {"active_ws": int(ws_active), "task_count": int(task_count)}
-
-
 @app.post("/evaluator/analyze", response_model=TaskCreateResponse)
 @limiter.limit("3/minute")
 async def evaluator_analyze(
@@ -301,15 +126,6 @@ async def evaluator_analyze(
 ):
     celery_task = run_evaluation.delay(req.repo_url, req.description or "", req.n_competitors)
     task_id = celery_task.id
-
-    redis_client = request.app.state.redis
-    redis_client.zadd("evaluator:task_history", {task_id: time.time()})
-    redis_client.hset(f"task_meta:{task_id}", mapping={
-        "question": f"评测 {req.repo_url}",
-        "created_at": str(int(time.time())),
-        "user": "anon",
-    })
-
     logger.info("Evaluation task created: task_id=%s repo=%s",
                   task_id, req.repo_url)
     return {"task_id": task_id, "status": "queued"}
@@ -323,13 +139,6 @@ async def evaluator_analyze_text(
 ):
     celery_task = run_text_evaluation.delay(req.description, req.n_competitors)
     task_id = celery_task.id
-    redis_client = request.app.state.redis
-    redis_client.zadd("evaluator:task_history", {task_id: time.time()})
-    redis_client.hset(f"task_meta:{task_id}", mapping={
-        "question": f"评测: {req.description[:100]}",
-        "created_at": str(int(time.time())),
-        "user": "anon",
-    })
     logger.info("Text evaluation task created: task_id=%s", task_id)
     return {"task_id": task_id, "status": "queued"}
 

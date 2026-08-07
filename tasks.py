@@ -1,15 +1,16 @@
+import json as _json
 import os
+import re
 
 from celery import shared_task
 from dotenv import load_dotenv
 from logger import get_logger
 
+from config import DATABASE_URL
+
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 logger = get_logger(__name__)
-
-_IS_TESTING = os.getenv("TESTING", "").lower() in ("1", "true", "yes")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
 ADVISOR_SYSTEM_PROMPT = """你是 AgentForge 产品竞争力评测顾问。你的知识基于五维 Rubric 评测体系：
 
@@ -30,60 +31,6 @@ ADVISOR_SYSTEM_PROMPT = """你是 AgentForge 产品竞争力评测顾问。你�
 - 帮助对比多个项目，分析优劣势
 - 如果上下文中有评测数据，必须引用具体数字（如 stars 数、活跃天数等）
 - 回答简洁，控制在 400 字以内"""
-
-
-def _placeholder_result(question: str) -> dict:
-    return {
-        "answer": f"分析完成：关于「{question}」的结论是...",
-        "sources": [],
-    }
-
-
-def _query_recent_evaluations(limit: int = 5) -> list[dict]:
-    try:
-        import asyncio
-
-        from models import EvaluationRecord
-        from sqlalchemy import desc, select
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-        from config import DATABASE_URL
-
-        engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, pool_size=1)
-        factory = async_sessionmaker(engine, expire_on_commit=False)
-
-        async def _fetch():
-            async with factory() as db:
-                result = await db.execute(
-                    select(EvaluationRecord)
-                    .order_by(desc(EvaluationRecord.created_at))
-                    .limit(limit)
-                )
-                return result.scalars().all()
-            await engine.dispose()
-
-        records = asyncio.run(_fetch())
-        result_list = []
-        for r in records:
-            result_list.append({
-                "repo": r.repo_full_name,
-                "url": r.repo_url,
-                "score": r.weighted_total or 0.0,
-                "positioning": r.score_positioning or 0,
-                "differentiation": r.score_differentiation or 0,
-                "moat": r.score_moat or 0,
-                "engineering": r.score_engineering or 0,
-                "sustainability": r.score_sustainability or 0,
-                "summary": r.overall_summary or "",
-                "strengths": r.top_strengths or "",
-                "weaknesses": r.top_weaknesses or "",
-                "evaluated_at": str(r.created_at) if r.created_at else "",
-            })
-        logger.info("Queried %d evaluation records for advisor", len(result_list))
-        return result_list
-    except Exception as e:
-        logger.warning("Failed to query evaluation_records: %s", e)
-        return []
 
 
 def _build_advisor_context(evaluations: list[dict], question: str) -> str:
@@ -109,36 +56,6 @@ def _build_advisor_context(evaluations: list[dict], question: str) -> str:
     return "\n".join(parts)
 
 
-def _call_advisor(question: str, history: list[dict] | None = None) -> dict:
-    from core import llm
-
-    api_key = os.getenv("DEEPSEEK_API_KEY", "")
-    if not api_key:
-        if _IS_TESTING:
-            return _placeholder_result(question)
-        raise RuntimeError("DEEPSEEK_API_KEY is not set")
-
-    evaluations = _query_recent_evaluations(limit=5)
-    context = _build_advisor_context(evaluations, question)
-
-    messages = [{"role": "system", "content": ADVISOR_SYSTEM_PROMPT}]
-    if history:
-        for msg in history:
-            messages.append(msg)
-    messages.append({"role": "user", "content": context})
-
-    result = llm.chat(messages, temperature=0.7, max_tokens=600)
-    return {
-        "answer": result["content"],
-        "usage": result["usage"],
-        "sources": [f"{e['repo']} ({e['score']:.2f})" for e in evaluations] if evaluations else [],
-    }
-
-
-def _run_pipeline(question: str, history: list[dict] | None = None) -> dict:
-    return _call_advisor(question, history=history)
-
-
 def _query_evaluation_by_repo(repo_url: str) -> dict | None:
     try:
         import asyncio
@@ -146,8 +63,6 @@ def _query_evaluation_by_repo(repo_url: str) -> dict | None:
         from models import EvaluationRecord
         from sqlalchemy import desc, select
         from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-        from config import DATABASE_URL
 
         engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, pool_size=1)
         factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -238,8 +153,6 @@ def run_text_evaluation(self, description: str, n_competitors: int = 3) -> dict:
             timeout=90,
         )
 
-        import json as _json
-        import re
         text = result["content"].strip()
         m = re.search(r'\{[\s\S]*\}', text)
         data = _json.loads(m.group(0)) if m else {}
@@ -309,23 +222,8 @@ def run_text_evaluation(self, description: str, n_competitors: int = 3) -> dict:
         try:
             import asyncio
 
-            from core.llm import record_usage
-            asyncio.run(record_usage(
-                user_id=None, module="evaluator",
-                model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-                total_tokens=result["usage"].get("total_tokens", 0),
-            ))
-        except Exception:
-            pass
-
-        try:
-            import asyncio
-            import json as _j
-
             from models import EvaluationRecord
             from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-            from config import DATABASE_URL
 
             engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, pool_size=1)
             factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -342,8 +240,8 @@ def run_text_evaluation(self, description: str, n_competitors: int = 3) -> dict:
                         score_engineering=evaluation["scores"].get("engineering", {}).get("score", 0),
                         score_sustainability=evaluation["scores"].get("sustainability", {}).get("score", 0),
                         overall_summary=evaluation["overall_summary"],
-                        top_strengths=_j.dumps(evaluation["top_strengths"], ensure_ascii=False),
-                        top_weaknesses=_j.dumps(evaluation["top_weaknesses"], ensure_ascii=False),
+                        top_strengths=_json.dumps(evaluation["top_strengths"], ensure_ascii=False),
+                        top_weaknesses=_json.dumps(evaluation["top_weaknesses"], ensure_ascii=False),
                         report_markdown=report_md,
                     ))
                     await db.commit()
@@ -373,55 +271,6 @@ def run_text_evaluation(self, description: str, n_competitors: int = 3) -> dict:
         }
     except Exception as exc:
         logger.error("Text evaluation failed: %s", exc)
-        raise self.retry(exc=exc)
-
-
-_HAS_CHROMA = False
-
-
-@shared_task(
-    bind=True,
-    max_retries=3,
-    default_retry_delay=5,
-    soft_time_limit=30,
-    time_limit=60,
-    name="tasks.run_rag_query",
-)
-def run_rag_query(self, question: str, session_id: str = None) -> dict:
-    history = None
-    if session_id:
-        try:
-            from session_manager import add_message, get_history
-            history = get_history(session_id)
-        except Exception:
-            pass
-    try:
-        result = _run_pipeline(question, history=history)
-        if session_id:
-            try:
-                from session_manager import add_message
-                add_message(session_id, "user", question)
-                add_message(session_id, "assistant", result["answer"])
-            except Exception:
-                pass
-        try:
-            import asyncio
-
-            from core.llm import record_usage
-            asyncio.run(record_usage(
-                user_id=None,
-                module="advisor",
-                model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-                total_tokens=result.get("usage", {}).get("total_tokens", 0),
-                prompt_tokens=result.get("usage", {}).get("prompt_tokens", 0),
-                completion_tokens=result.get("usage", {}).get("completion_tokens", 0),
-            ))
-        except Exception:
-            pass
-        logger.info("Celery task completed: task_id=%s question=%s", self.request.id, question[:50])
-        return {"status": "done", "result": result}
-    except Exception as exc:
-        logger.error("Celery task failed: task_id=%s error=%s", self.request.id, exc)
         raise self.retry(exc=exc)
 
 
@@ -455,30 +304,10 @@ def run_evaluation(self, repo_url: str, description: str = "", n_competitors: in
 
         try:
             import asyncio
-
-            from core.llm import record_usage
-            usage = result.get("usage", {})
-            asyncio.run(record_usage(
-                user_id=None,
-                module="evaluator",
-                model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-                total_tokens=usage.get("total_tokens", 0),
-                prompt_tokens=usage.get("prompt_tokens", 0),
-                completion_tokens=usage.get("completion_tokens", 0),
-                latency_ms=result.get("latency_ms", 0),
-                detail=project.full_name,
-            ))
-        except Exception:
-            pass
-
-        try:
-            import asyncio
             import json
 
             from models import EvaluationRecord
             from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-            from config import DATABASE_URL
 
             scores = evaluation.get("scores", {})
             engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, pool_size=1)
@@ -550,28 +379,3 @@ def run_evaluation(self, repo_url: str, description: str = "", n_competitors: in
         logger.error("Evaluation failed: task_id=%s repo=%s error=%s",
                       self.request.id, repo_url, exc)
         raise self.retry(exc=exc)
-
-
-_INMEMORY_MODE = os.getenv("INMEMORY_TASKS", "").lower() in ("1", "true", "yes")
-if _INMEMORY_MODE:
-    _results: dict[str, dict] = {}
-    _task_counter = 0
-
-    def run_rag_query_async(question: str, session_id: str = None) -> str:
-        global _task_counter
-        _task_counter += 1
-        task_id = f"task-{_task_counter:04d}"
-        _results[task_id] = {"status": "running", "result": None}
-        history = None
-        if session_id:
-            try:
-                from session_manager import get_history
-                history = get_history(session_id)
-            except Exception:
-                pass
-        result = _run_pipeline(question, history=history)
-        _results[task_id] = {"status": "done", "result": result}
-        return task_id
-
-    def get_task_status(task_id: str) -> dict | None:
-        return _results.get(task_id)

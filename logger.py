@@ -70,7 +70,6 @@ def setup_logging() -> None:
         json_handler.setFormatter(JsonFormatter(datefmt="%Y-%m-%dT%H:%M:%S"))
         root.addHandler(json_handler)
 
-    logging.getLogger("passlib").setLevel(logging.WARNING)
     logging.getLogger("slowapi").setLevel(logging.WARNING)
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
 
