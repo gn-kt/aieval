@@ -8,7 +8,6 @@
 - 竞品自动搜索对比
 - LLM-as-a-Judge 五维打分（定位/差异化/护城河/工程健康度/可持续性）+ 硬阈值校准
 - 追问对话（带上下文的深度分析）
-- JWT 用户认证
 - 异步任务队列（Celery + Redis）
 - React 单页评测面板（TypeScript + Vite）
 - 可配置 LLM（支持自定义 API endpoint + model）
@@ -18,7 +17,7 @@
 | 层 | 技术 |
 |------|------|
 | 后端 | FastAPI + SQLAlchemy + Alembic |
-| 数据库 | PostgreSQL |
+| 数据库 | PostgreSQL（evaluation_records / llm_configs） |
 | 缓存/队列 | Redis + Celery |
 | 前端 | React 18 + TypeScript + Vite |
 | LLM | DeepSeek（可配置） |
@@ -28,7 +27,7 @@
 ```bash
 # 1. 复制环境变量
 cp .env.example .env
-# 编辑 .env 填入 API Key 和数据库配置
+# 编辑 .env 填入 DEEPSEEK_API_KEY
 
 # 2. 安装依赖
 pip install -r requirements.txt
@@ -40,21 +39,35 @@ alembic upgrade head
 python 启动竞品雷达.py
 ```
 
-## API 端点（20 个）
+## 环境变量
+
+所有配置集中在 `.env` 文件，示例见 `.env.example`。
+
+| 变量 | 必填 | 说明 |
+|------|:--:|------|
+| `DEEPSEEK_API_KEY` | ✅ | DeepSeek API Key |
+| `DEEPSEEK_BASE_URL` | — | 默认 `https://api.deepseek.com` |
+| `DEEPSEEK_MODEL` | — | 默认 `deepseek-chat` |
+| `LLM_CHAT_URL` | — | 可选：自定义 chat API 地址 |
+| `DATABASE_URL` | — | 默认本机 PostgreSQL |
+| `REDIS_URL` | — | 默认本机 Redis |
+| `GITHUB_TOKEN` | — | GitHub API token，提高频率上限 |
+
+## API 端点（11 个）
 
 | 端点 | 用途 |
 |------|------|
-| `POST /register` | 用户注册 |
-| `POST /login` | JWT 登录 |
-| `POST /evaluator/analyze` | 提交 GitHub 仓库评测 |
-| `POST /evaluator/analyze-text` | 提交文字描述评测 |
-| `GET /evaluator/history` | 评测历史 |
-| `POST /advisor/ask` | 追问评测结果 |
+| `GET /health` | 健康检查 |
+| `POST /evaluator/analyze` | 提交 GitHub 仓库评测（Celery 异步） |
+| `POST /evaluator/analyze-text` | 提交文字描述评测（Celery 异步） |
+| `GET /result/{task_id}` | 轮询任务结果 |
+| `POST /advisor/ask` | 追问评测结果（同步） |
+| `GET /evaluator/history` | 评测历史（最近 50 条） |
+| `DELETE /evaluator/history` | 清空评测历史 |
+| `DELETE /evaluator/history/{eval_id}` | 删除单条评测记录 |
 | `GET /settings/llm` | 获取 LLM 配置 |
 | `POST /settings/llm` | 保存 LLM 配置 |
-| `GET /result/{task_id}` | 查询任务结果 |
-| `WS /ws/{task_id}` | WebSocket 实时推送 |
-| `GET /health` | 健康检查 |
+| `POST /settings/llm/test` | 测试 LLM 连接 |
 
 ## 评测引擎
 
@@ -81,27 +94,24 @@ reporter.py     → 生成报告（含优化建议 + 发展方向）
 | 工程健康度 | 15% | 提交频率 + issue 关闭率 |
 | 可持续性 | 15% | 组织支持 + 商业模式 |
 
-核心原则：**宁低勿高** — 2分="突出"，不是"还不错"。
+核心原则：**宁低勿高** — 2 分 = "突出"，不是"还不错"。
 
 ## 项目结构
 
 ```
 竞品雷达/
-├── api.py                  # FastAPI 主入口（20 个端点）
-├── auth.py                 # JWT 认证
-├── models.py               # 数据模型（6 表）
+├── api.py                  # FastAPI 主入口（11 个端点）
+├── models.py               # 数据模型（2 表）
 ├── schemas.py              # Pydantic 校验
 ├── database.py             # 数据库连接 + Alembic 自动迁移
 ├── celery_app.py           # Celery 配置
-├── tasks.py                # Celery 异步任务
+├── tasks.py                # Celery 异步任务 + 追问辅助函数
 ├── redis_client.py         # Redis 连接
-├── session_manager.py      # Redis 会话存储
-├── rate_limiter.py         # 滑动窗口限流
 ├── logger.py               # 结构化日志
-├── config.py               # 环境变量配置
+├── config.py               # 环境变量统一配置（所有 os.getenv 单入口）
 ├── 启动竞品雷达.py          # 一键启动脚本
 ├── core/
-│   └── llm.py              # 统一 LLM 网关（chat + 用量记录）
+│   └── llm.py              # 统一 LLM 网关（chat + 用户自定义配置）
 ├── modules/evaluator/      # 核心评测引擎
 │   ├── collector.py        # GitHub API 采集
 │   ├── competitor.py       # 竞品搜索
@@ -110,5 +120,5 @@ reporter.py     → 生成报告（含优化建议 + 发展方向）
 ├── migrations/             # Alembic 迁移
 ├── frontend/               # React 前端
 │   └── src/pages/EvaluatorPage.tsx  # 主页面（三种输入模式）
-└── tests/                  # pytest 测试
+└── tests/                  # pytest 测试（36 个）
 ```
