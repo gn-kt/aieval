@@ -10,14 +10,14 @@
 - 追问对话（带上下文的深度分析）
 - 异步任务队列（Celery + Redis）
 - React 单页评测面板（TypeScript + Vite）
-- 可配置 LLM（支持自定义 API endpoint + model）
+- LLM 通过 `.env` 配置（支持任意 OpenAI 兼容接口）
 
 ## 技术栈
 
 | 层 | 技术 |
 |------|------|
 | 后端 | FastAPI + SQLAlchemy + Alembic |
-| 数据库 | PostgreSQL（evaluation_records / llm_configs） |
+| 数据库 | PostgreSQL（evaluation_records） |
 | 缓存/队列 | Redis + Celery |
 | 前端 | React 18 + TypeScript + Vite |
 | LLM | DeepSeek（可配置） |
@@ -53,7 +53,7 @@ python 启动竞品雷达.py
 | `REDIS_URL` | — | 默认本机 Redis |
 | `GITHUB_TOKEN` | — | GitHub API token，提高频率上限 |
 
-## API 端点（11 个）
+## API 端点（8 个）
 
 | 端点 | 用途 |
 |------|------|
@@ -65,9 +65,6 @@ python 启动竞品雷达.py
 | `GET /evaluator/history` | 评测历史（最近 50 条） |
 | `DELETE /evaluator/history` | 清空评测历史 |
 | `DELETE /evaluator/history/{eval_id}` | 删除单条评测记录 |
-| `GET /settings/llm` | 获取 LLM 配置 |
-| `POST /settings/llm` | 保存 LLM 配置 |
-| `POST /settings/llm/test` | 测试 LLM 连接 |
 
 ## 评测引擎
 
@@ -100,8 +97,8 @@ reporter.py     → 生成报告（含优化建议 + 发展方向）
 
 ```
 竞品雷达/
-├── api.py                  # FastAPI 主入口（11 个端点）
-├── models.py               # 数据模型（2 表）
+├── api.py                  # FastAPI 主入口（8 个端点）
+├── models.py               # 数据模型（1 表）
 ├── schemas.py              # Pydantic 校验
 ├── database.py             # 数据库连接 + Alembic 自动迁移
 ├── celery_app.py           # Celery 配置
@@ -111,7 +108,7 @@ reporter.py     → 生成报告（含优化建议 + 发展方向）
 ├── config.py               # 环境变量统一配置（所有 os.getenv 单入口）
 ├── 启动竞品雷达.py          # 一键启动脚本
 ├── core/
-│   └── llm.py              # 统一 LLM 网关（chat + 用户自定义配置）
+│   └── llm.py              # 统一 LLM 网关（chat + chat_simple）
 ├── modules/evaluator/      # 核心评测引擎
 │   ├── collector.py        # GitHub API 采集
 │   ├── competitor.py       # 竞品搜索
