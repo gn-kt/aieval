@@ -2,49 +2,20 @@
 
 职责：
 1. DeepSeek chat 补全封装（超时/重试）
-2. 用户自定义 LLM 配置（从 DB 读取，优先于 .env）
+2. .env 统一配置入口（所有 LLM 参数从 config.py 读取）
 """
 import time
 
 import httpx
 from logger import get_logger
 
-from config import DATABASE_URL, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, LLM_CHAT_URL
+from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, LLM_CHAT_URL
 
 logger = get_logger(__name__)
 
 
 class LLMError(RuntimeError):
     """LLM 调用统一异常。"""
-
-
-def _get_active_config() -> dict:
-    try:
-        from models import LLMConfig
-        from sqlalchemy import create_engine as _sync_engine
-        from sqlalchemy import select
-        from sqlalchemy.orm import Session
-
-        sync_url = DATABASE_URL.replace("+asyncpg", "+psycopg2")
-        engine = _sync_engine(sync_url, pool_pre_ping=True, pool_size=1)
-        try:
-            with Session(engine) as db:
-                result = db.execute(
-                    select(LLMConfig).where(LLMConfig.is_active == True).limit(1)
-                )
-                row = result.scalar_one_or_none()
-                if row and row.api_key:
-                    return {
-                        "api_key": row.api_key,
-                        "base_url": row.base_url or DEEPSEEK_BASE_URL,
-                        "model": row.model or DEEPSEEK_MODEL,
-                        "provider": row.provider,
-                    }
-                return {}
-        finally:
-            engine.dispose()
-    except Exception:
-        return {}
 
 
 def _get_chat_config() -> tuple[str, str, str]:

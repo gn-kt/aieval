@@ -1,6 +1,6 @@
 import sqlalchemy as sa
 from database import Base
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Column, DateTime, Integer, String, Text
 from sqlalchemy.sql import func
 
 
@@ -21,16 +21,4 @@ class EvaluationRecord(Base):
     top_strengths = Column(Text, default="[]")
     top_weaknesses = Column(Text, default="[]")
     report_markdown = Column(Text, default="")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-
-class LLMConfig(Base):
-    __tablename__ = "llm_configs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    provider = Column(String(50), default="custom")
-    api_key = Column(String(500), default="")
-    base_url = Column(String(500), default="")
-    model = Column(String(100), default="")
-    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

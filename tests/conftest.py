@@ -47,7 +47,7 @@ async def setup_database():
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(lambda c: c.execute(sa.text("DROP TABLE IF EXISTS alembic_version CASCADE")))
         await conn.run_sync(lambda c: c.execute(sa.text(
-            "DROP TABLE IF EXISTS users, usage_records, sentiment_posts, sentiment_results CASCADE"
+            "DROP TABLE IF EXISTS users, usage_records, sentiment_posts, sentiment_results, llm_configs CASCADE"
         )))
 
 
