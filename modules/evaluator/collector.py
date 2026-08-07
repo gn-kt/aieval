@@ -1,16 +1,14 @@
 """GitHub API 采集器 —— 获取项目 README / Issues / Commits 元数据。"""
-import os
 import re
 from dataclasses import dataclass, field
 
 import httpx
+from config import GITHUB_TOKEN, GITHUB_VERIFY_SSL
 from logger import get_logger
 
 logger = get_logger(__name__)
 
 GITHUB_API = "https://api.github.com"
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
-GITHUB_VERIFY_SSL = os.getenv("GITHUB_VERIFY_SSL", "true").lower() not in ("0", "false", "no")
 _COLLECTOR_CLIENT: httpx.Client | None = None
 
 

@@ -9,6 +9,9 @@ DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 LLM_CHAT_URL = os.getenv("LLM_CHAT_URL", "")
 
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+GITHUB_VERIFY_SSL = os.getenv("GITHUB_VERIFY_SSL", "true").lower() not in ("0", "false", "no")
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/backend_dev")
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 

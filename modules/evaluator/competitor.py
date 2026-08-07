@@ -1,7 +1,7 @@
 """竞品搜索 —— 基于项目描述自动发现 3-5 个竞品仓库并采集元数据。"""
-import os
 import re
 
+from config import GITHUB_TOKEN, GITHUB_VERIFY_SSL
 from logger import get_logger
 
 from .collector import RepoMeta, collect_repo
@@ -48,10 +48,10 @@ def _keyword_search_competitors(description: str, n: int = 5) -> list[str]:
         base_url="https://api.github.com",
         headers={"Accept": "application/vnd.github+json"},
         timeout=15,
-        verify=os.getenv("GITHUB_VERIFY_SSL", "true").lower() not in ("0", "false", "no"),
+        verify=GITHUB_VERIFY_SSL,
         follow_redirects=True,
     )
-    token = os.getenv("GITHUB_TOKEN", "")
+    token = GITHUB_TOKEN
     if token:
         client.headers["Authorization"] = f"Bearer {token}"
 
