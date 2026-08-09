@@ -40,14 +40,144 @@
 | 结构化报告 + 建议 | — | — | ✅ | ✅ |
 | 可本地运行 | — | — | — | ✅ |
 
+## 前置条件
+
+| 组件 | 用途 | 安装 |
+|------|------|------|
+| Python 3.10+ | 后端运行 | — |
+| PostgreSQL | 评测记录持久化 | `brew install postgresql`（macOS）/ Windows 安装包 |
+| Redis | Celery 任务队列 | `brew install redis`（macOS）/ Windows 安装包 |
+| npm | 前端构建 | Node.js 自带 |
+| DeepSeek API Key | LLM 调用（免费额度） | [注册获取](https://platform.deepseek.com/) |
+
+### 详细安装与验证
+
+### 1. Python
+
+```bash
+python --version         # ≥ 3.10
+pip install -r requirements.txt
+```
+
+### 2. PostgreSQL
+
+```bash
+# 安装后创建数据库
+createdb -U postgres backend_dev
+# 或
+psql -U postgres -c "CREATE DATABASE backend_dev;"
+
+# 验证
+psql -U postgres -d backend_dev -c "SELECT 1;"
+```
+
+### 3. Redis
+
+```bash
+# macOS
+brew install redis && brew services start redis
+
+# Linux
+sudo apt install redis-server && sudo systemctl start redis
+
+# Windows: 下载解压后双击 redis-server.exe
+
+# 验证
+redis-cli ping    # 应输出 PONG
+```
+
+### 4. npm
+
+```bash
+node --version    # ≥ 16
+npm --version     # ≥ 8
+# 若无: https://nodejs.org/ 下载 LTS 版
+```
+
+### 5. .env 配置
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env`，必填项：
+
+```
+DEEPSEEK_API_KEY=sk-你的key          # [注册获取](https://platform.deepseek.com/)
+DATABASE_URL=postgresql+asyncpg://postgres:你的密码@localhost:5432/backend_dev
+REDIS_URL=redis://127.0.0.1:6379/0
+```
+
+### 6. 逐项验证
+
+```bash
+# Python 能读 .env
+python -c "from dotenv import load_dotenv; load_dotenv(); import os; print(os.getenv('DEEPSEEK_API_KEY')[:5])"
+
+# PostgreSQL 连通
+python -c "import asyncpg,asyncio;asyncio.run(asyncpg.connect('postgresql://postgres:你的密码@localhost:5432/backend_dev'));print('ok')"
+
+# Redis 连通
+python -c "import redis;print(redis.Redis.from_url('redis://127.0.0.1:6379/0').ping())"
+```
+
+---
+
 ## 快速开始
 
 ```bash
-cp .env.example .env          # 填入 DEEPSEEK_API_KEY
-pip install -r requirements.txt
-alembic upgrade head
-python 启动竞品雷达.py        # 一键启动（Redis → Celery → FastAPI → Vite）
+cp .env.example .env              # 1. 填入 DEEPSEEK_API_KEY（必填）
+pip install -r requirements.txt   # 2. 安装 Python 依赖
+alembic upgrade head              # 3. 初始化数据库表（仅首次需要）
+python 启动竞品雷达.py            # 4. 一键启动 → 浏览器自动打开 http://localhost:5173
 ```
+
+> 启动脚本依次拉起 Redis → Celery Worker → FastAPI(8000) → Vite(5173)。前端依赖首次自动 `npm install`（1-2 分钟）。`Ctrl+C` 关闭全部服务。
+
+## 使用步骤
+
+打开 `http://localhost:5173`，页面从上到下：
+
+### 第一步：输入评测对象（三选一）
+
+| 方式 | 操作 | 适合场景 | 典型耗时 |
+|------|------|---------|:--:|
+| **GitHub URL** | 输入框粘贴仓库地址，如 `https://github.com/psf/requests` | 分析已有开源项目 | 30-60s |
+| **文字描述** | 切换到"文字描述"标签，输入产品名 + 一段描述 | 还没代码、快速验证想法 | 15-30s |
+| **上传文件夹** | 切换到"上传文件"标签，拖入整个项目文件夹 | 分析本地私有项目 | 30-90s |
+
+### 第二步：查看评测结果
+
+提交后等待任务完成，页面展示：
+
+```
+┌───────────────────────────────────────────────┐
+│  综合得分 1.85 / 2.00                          │
+│                                               │
+│  定位 ████ 2/2   差异化 ████ 2/2              │
+│  护城河 ████ 2/2   工程 ████ 2/2              │
+│  可持续 ██░░ 1/2                              │
+│                                               │
+│  📋 优化建议                                   │
+│  1. 增加商业化模式（企业版 / SaaS）提高可持续性   │
+│  2. 补充竞品对比文档，强化定位                   │
+│                                               │
+│  🧭 发展方向                                   │
+│  1. 插件生态：开放第三方扩展接入                 │
+│  2. 企业功能：SSO / 审计日志 / SLA             │
+└───────────────────────────────────────────────┘
+```
+
+### 第三步：追问对话
+
+底部输入框可与 AI 继续对话，例如：
+- "我的产品和 requests 差距在哪？"
+- "最该优先改进哪个维度？"
+- "护城河怎么从 0 分提到 2 分？"
+
+历史记录在右侧面板，可回看、删除。
+
+---
 
 ## 评测引擎
 
@@ -103,20 +233,29 @@ reporter.py     → 生成报告（含优化建议 + 发展方向）
 
 ```
 竞品雷达/
+├── 启动竞品雷达.py          # 一键启动（Redis → Celery → FastAPI → Vite → 浏览器）
 ├── api.py                  # FastAPI 主入口（8 个端点）
-├── models.py               # 数据模型（1 表）
+├── config.py               # 环境变量统一配置（.env → Pydantic Settings）
+├── models.py               # 数据模型（1 表：evaluation_records）
 ├── schemas.py              # Pydantic 校验
 ├── database.py             # 数据库连接
 ├── celery_app.py           # Celery 配置
 ├── tasks.py                # Celery 异步任务
-├── config.py               # 环境变量统一配置
-├── core/llm.py             # 统一 LLM 网关
+├── redis_client.py         # Redis 连接客户端
+├── logger.py               # 结构化日志
+├── requirements.txt        # Python 依赖
+├── .env.example            # 环境变量模板
+├── alembic.ini             # 数据库迁移配置
+├── migrations/             # Alembic 迁移版本
+├── core/
+│   └── llm.py              # 统一 LLM 网关
 ├── modules/evaluator/      # 核心评测引擎
 │   ├── collector.py        # GitHub API 采集
-│   ├── competitor.py       # 竞品搜索
+│   ├── competitor.py       # 自动搜索竞品
 │   ├── rubric.py           # 五维 Rubric + LLM-as-a-Judge
 │   └── reporter.py         # Markdown 报告生成
-├── frontend/               # React 前端
-│   └── src/pages/EvaluatorPage.tsx  # 主页面
-└── tests/                  # pytest（36 个测试）
+├── frontend/
+│   └── src/pages/          # React 前端（单页应用）
+├── tests/                  # pytest（36 个测试）
+└── logs/                   # 运行日志
 ```
