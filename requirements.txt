@@ -4,7 +4,7 @@ sqlalchemy
 alembic
 asyncpg
 celery
-redis==5.2.1
+redis
 python-dotenv
 pydantic
 slowapi
