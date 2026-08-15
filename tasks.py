@@ -299,6 +299,7 @@ def run_evaluation(self, repo_url: str, description: str = "", n_competitors: in
         competitors = search_competitors(
             project_description=description or project.description,
             n=n_competitors,
+            exclude_full_name=project.full_name,
         )
 
         result = evaluate_product(project, competitors, with_usage=True)

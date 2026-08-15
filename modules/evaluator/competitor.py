@@ -81,6 +81,7 @@ def search_competitors(
     n: int = 5,
     *,
     use_llm: bool = True,
+    exclude_full_name: str | None = None,
 ) -> list[RepoMeta]:
     """搜索竞品并采集元数据。
 
@@ -100,8 +101,13 @@ def search_competitors(
         candidates = _keyword_search_competitors(project_description, n=n)
 
     competitors: list[RepoMeta] = []
-    for full_name in candidates[:n]:
+    for full_name in candidates:
+        # 过滤掉目标仓库自己（LLM 可能把目标列为竞品）
+        if exclude_full_name and full_name.lower() == exclude_full_name.lower():
+            continue
         meta = collect_repo(f"https://github.com/{full_name}")
         competitors.append(meta)
+        if len(competitors) >= n:
+            break
 
     return competitors
