@@ -161,7 +161,7 @@ def generate_report(evaluation: dict, project: RepoMeta, competitors: list[RepoM
     lines += [
         "---",
         "",
-        "*报告由 AgentForge 评测引擎自动生成 | LLM-as-a-Judge + 五维 Rubric*",
+        "*报告由竞品雷达评测引擎自动生成 | LLM-as-a-Judge + 五维 Rubric*",
     ]
 
     return "\n".join(lines)

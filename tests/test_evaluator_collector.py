@@ -1,7 +1,5 @@
-﻿"""Tests for modules/evaluator/collector.py"""
+"""Tests for modules/evaluator/collector.py"""
 import pytest
-import sys
-sys.path.insert(0, r"D:\codebase\作品集\竞品雷达")
 
 from modules.evaluator.collector import _parse_github_url, RepoMeta
 

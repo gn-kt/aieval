@@ -31,8 +31,10 @@ def kill_port(port: int) -> None:
             ["netstat", "-ano"], capture_output=True, text=True, encoding="gbk", errors="replace"
         )
         for line in result.stdout.splitlines():
-            if f":{port}" in line and "LISTENING" in line:
-                pid = line.strip().split()[-1]
+            parts = line.split()
+            # parts[1] 是本地地址（如 0.0.0.0:8000），endswith 精确匹配端口，避免 :8000 误匹配 :80001
+            if len(parts) >= 4 and parts[3] == "LISTENING" and parts[1].endswith(f":{port}"):
+                pid = parts[-1]
                 subprocess.run(["taskkill", "/f", "/pid", pid], capture_output=True)
     except Exception:
         pass
@@ -88,8 +90,9 @@ def main() -> None:
     # [2/4] 启动 Redis
     print("[2/4] 启动 Redis...")
     try:
-        subprocess.Popen([REDIS_EXE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        redis_proc = subprocess.Popen([REDIS_EXE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          creationflags=subprocess.CREATE_NO_WINDOW)
+        PROCESSES.append(redis_proc)
     except FileNotFoundError:
         print("  [警告] Redis 未安装在 D:\\IT_environment\\Redis\\，跳过")
         print("  如果本机已有 Redis 在运行，可忽略此警告。")

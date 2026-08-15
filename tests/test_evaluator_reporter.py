@@ -1,7 +1,5 @@
-﻿"""Tests for modules/evaluator/reporter.py"""
+"""Tests for modules/evaluator/reporter.py"""
 import pytest
-import sys
-sys.path.insert(0, r"D:\codebase\作品集\竞品雷达")
 
 from modules.evaluator.reporter import generate_report
 from modules.evaluator.collector import RepoMeta

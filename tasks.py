@@ -12,7 +12,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 logger = get_logger(__name__)
 
-ADVISOR_SYSTEM_PROMPT = """你是 AgentForge 产品竞争力评测顾问。你的知识基于五维 Rubric 评测体系：
+ADVISOR_SYSTEM_PROMPT = """你是竞品雷达产品竞争力评测顾问。你的知识基于五维 Rubric 评测体系：
 
 1. **定位 (Positioning)** — 目标用户和场景是否清晰？README 能否让人快速理解？
 2. **差异化 (Differentiation)** — 与竞品相比的独特价值是什么？是结构性差异还是功能堆叠？
@@ -220,7 +220,7 @@ def run_text_evaluation(self, description: str, n_competitors: int = 3) -> dict:
             report_md += f"\n**短板**: {', '.join(evaluation['top_weaknesses'])}\n"
         if data.get("competitors"):
             report_md += f"\n**竞品**: {', '.join(data['competitors'])}\n"
-        report_md += "\n---\n*由 AgentForge 评测引擎生成*"
+        report_md += "\n---\n*由竞品雷达评测引擎生成*"
 
         try:
             import asyncio
@@ -252,7 +252,7 @@ def run_text_evaluation(self, description: str, n_competitors: int = 3) -> dict:
 
             asyncio.run(_save())
         except Exception:
-            pass
+            logger.warning("Failed to persist text evaluation to DB", exc_info=True)
 
         logger.info("Text evaluation completed: score=%.2f", evaluation["weighted_total"])
         return {

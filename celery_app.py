@@ -7,7 +7,7 @@ from config import REDIS_URL
 _IS_TESTING = os.getenv("TESTING", "").lower() in ("1", "true", "yes")
 
 celery_app = Celery(
-    "rag_tasks",
+    "competitor_radar",
     broker=REDIS_URL,
     backend=REDIS_URL,
     include=["tasks"],

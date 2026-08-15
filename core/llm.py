@@ -73,6 +73,8 @@ def chat(
             logger.warning("LLM chat attempt %d failed: %s", attempt + 1, exc)
             if attempt < max_retries:
                 time.sleep(1.5 * (attempt + 1))
+        except (KeyError, IndexError, ValueError) as exc:
+            raise LLMError(f"LLM response malformed: {exc}") from exc
     raise LLMError(f"LLM chat failed after {max_retries + 1} attempts: {last_exc}")
 
 

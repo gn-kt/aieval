@@ -144,7 +144,8 @@ async def evaluator_analyze_text(
 
 
 @app.post("/advisor/ask", response_model=AdvisorAskResponse)
-async def advisor_ask(req: AdvisorAskRequest):
+@limiter.limit("10/minute")
+async def advisor_ask(req: AdvisorAskRequest, request: Request = None):
     from core import llm
     from tasks import (
         ADVISOR_SYSTEM_PROMPT,
@@ -163,8 +164,8 @@ async def advisor_ask(req: AdvisorAskRequest):
             "engineering": req.eval_data.get("scores", {}).get("engineering", {}).get("score", 0),
             "sustainability": req.eval_data.get("scores", {}).get("sustainability", {}).get("score", 0),
             "summary": req.eval_data.get("overall_summary", ""),
-            "strengths": "",
-            "weaknesses": "",
+            "strengths": ", ".join(req.eval_data.get("top_strengths") or []),
+            "weaknesses": ", ".join(req.eval_data.get("top_weaknesses") or []),
         }
     else:
         eval_data = _query_evaluation_by_repo(req.repo_url)
@@ -187,41 +188,34 @@ async def advisor_ask(req: AdvisorAskRequest):
 @app.get("/evaluator/history")
 async def evaluator_history():
     try:
+        from database import AsyncSessionLocal
         from models import EvaluationRecord
         from sqlalchemy import desc, select
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-        from config import DATABASE_URL
-
-        engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, pool_size=1)
-        try:
-            factory = async_sessionmaker(engine, expire_on_commit=False)
-            async with factory() as db:
-                result = await db.execute(
-                    select(EvaluationRecord).order_by(desc(EvaluationRecord.created_at)).limit(50)
-                )
-                records = result.scalars().all()
-                evaluations = [
-                    {
-                        "id": r.id,
-                        "repo": r.repo_full_name,
-                        "url": r.repo_url,
-                        "score": r.weighted_total or 0.0,
-                        "positioning": r.score_positioning or 0,
-                        "differentiation": r.score_differentiation or 0,
-                        "moat": r.score_moat or 0,
-                        "engineering": r.score_engineering or 0,
-                        "sustainability": r.score_sustainability or 0,
-                        "summary": r.overall_summary or "",
-                        "strengths": r.top_strengths or "",
-                        "weaknesses": r.top_weaknesses or "",
-                        "evaluated_at": str(r.created_at) if r.created_at else "",
-                    }
-                    for r in records
-                ]
-            return {"evaluations": evaluations}
-        finally:
-            await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(EvaluationRecord).order_by(desc(EvaluationRecord.created_at)).limit(50)
+            )
+            records = result.scalars().all()
+            evaluations = [
+                {
+                    "id": r.id,
+                    "repo": r.repo_full_name,
+                    "url": r.repo_url,
+                    "score": r.weighted_total or 0.0,
+                    "positioning": r.score_positioning or 0,
+                    "differentiation": r.score_differentiation or 0,
+                    "moat": r.score_moat or 0,
+                    "engineering": r.score_engineering or 0,
+                    "sustainability": r.score_sustainability or 0,
+                    "summary": r.overall_summary or "",
+                    "strengths": r.top_strengths or "",
+                    "weaknesses": r.top_weaknesses or "",
+                    "evaluated_at": str(r.created_at) if r.created_at else "",
+                }
+                for r in records
+            ]
+        return {"evaluations": evaluations}
     except Exception as e:
         logger.warning("History query failed: %s", e)
         return {"evaluations": []}
@@ -230,19 +224,14 @@ async def evaluator_history():
 @app.delete("/evaluator/history")
 async def evaluator_history_clear():
     try:
+        from database import AsyncSessionLocal
         from models import EvaluationRecord
         from sqlalchemy import delete
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-        from config import DATABASE_URL
-
-        engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, pool_size=1)
-        factory = async_sessionmaker(engine, expire_on_commit=False)
-        async with factory() as db:
+        async with AsyncSessionLocal() as db:
             result = await db.execute(delete(EvaluationRecord))
             await db.commit()
             count = result.rowcount
-        await engine.dispose()
         return {"status": "cleared", "count": count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -251,19 +240,13 @@ async def evaluator_history_clear():
 @app.delete("/evaluator/history/{eval_id}")
 async def evaluator_history_delete(eval_id: int):
     try:
+        from database import AsyncSessionLocal
         from models import EvaluationRecord
         from sqlalchemy import delete
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-        from config import DATABASE_URL
-
-        engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, pool_size=1)
-        factory = async_sessionmaker(engine, expire_on_commit=False)
-
-        async with factory() as db:
+        async with AsyncSessionLocal() as db:
             await db.execute(delete(EvaluationRecord).where(EvaluationRecord.id == eval_id))
             await db.commit()
-        await engine.dispose()
         return {"status": "deleted", "id": eval_id}
     except Exception as e:
         logger.warning("History delete failed: %s", e)

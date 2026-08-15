@@ -1,8 +1,6 @@
-﻿"""Tests for modules/evaluator/rubric.py"""
+"""Tests for modules/evaluator/rubric.py"""
 import json
 import pytest
-import sys
-sys.path.insert(0, r"D:\codebase\作品集\竞品雷达")
 
 from modules.evaluator.rubric import (
     DIMENSIONS,

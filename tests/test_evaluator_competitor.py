@@ -1,7 +1,5 @@
-﻿"""Tests for modules/evaluator/competitor.py"""
+"""Tests for modules/evaluator/competitor.py"""
 import pytest
-import sys
-sys.path.insert(0, r"D:\codebase\作品集\竞品雷达")
 
 from modules.evaluator.competitor import search_competitors
 from modules.evaluator.collector import RepoMeta
