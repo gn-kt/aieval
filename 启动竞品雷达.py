@@ -8,16 +8,19 @@ Ctrl+C 关闭所有服务
 """
 
 import os
+import shutil
 import subprocess
+import sys
 import time
 import webbrowser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-PYTHON = r"D:\IT_environment\Miniconda3\envs\ai_agent\python.exe"
-REDIS_EXE = r"D:\IT_environment\Redis\redis-server.exe"
-NPM_CMD = r"D:\IT_environment\Nvm\nodejs\npm.cmd"
-NODE_PATH = r"D:\IT_environment\Nvm\nodejs"
+# 优先环境变量 → 系统 PATH → 本机默认路径，避免换机器即崩
+PYTHON = os.environ.get("PYTHON") or sys.executable
+REDIS_EXE = os.environ.get("REDIS_EXE") or shutil.which("redis-server") or r"D:\IT_environment\Redis\redis-server.exe"
+NPM_CMD = os.environ.get("NPM_CMD") or shutil.which("npm.cmd") or shutil.which("npm") or r"D:\IT_environment\Nvm\nodejs\npm.cmd"
+NODE_PATH = os.environ.get("NODE_PATH") or r"D:\IT_environment\Nvm\nodejs"
 
 PROCESSES: list[subprocess.Popen] = []
 

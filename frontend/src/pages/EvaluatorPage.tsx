@@ -107,7 +107,8 @@ export default function EvaluatorPage() {
         }
         if (data.status === 'failed' || data.status === 'FAILURE') { setError('评测失败'); setWaiting(false); return; }
       } catch {}
-      if (attempts >= 60) { setError('评测超时'); setWaiting(false); return; }
+      // 150 次 × 2s = 300s，对齐后端任务 time_limit（text 180s / github 300s），避免长任务被前端提前判超时
+      if (attempts >= 150) { setError('评测超时'); setWaiting(false); return; }
       setTimeout(check, 2000);
     };
     check();

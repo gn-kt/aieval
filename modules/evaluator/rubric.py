@@ -325,6 +325,11 @@ def _parse_result(text: str, dimensions: dict) -> dict:
     for key, dim in dimensions.items():
         dim_score = scores.get(key, {})
         score_value = dim_score.get("score", 0) if isinstance(dim_score, dict) else 0
+        # 钳制到 0-2，防止 LLM 输出超界（如 3/5 分）导致总分 >2.00
+        try:
+            score_value = max(0, min(2, int(score_value)))
+        except (TypeError, ValueError):
+            score_value = 0
         weight = dim["weight"]
         weighted_total += score_value * weight
         dim_results[key] = {
@@ -351,6 +356,7 @@ def _parse_result(text: str, dimensions: dict) -> dict:
 
 def _fallback_parse(text: str, dimensions: dict) -> dict:
     dim_results = {}
+    weighted_total = 0.0
     for key, dim in dimensions.items():
         score = 0
         pattern = rf'{dim["name"]}|{dim["name_en"]}'
@@ -367,10 +373,11 @@ def _fallback_parse(text: str, dimensions: dict) -> dict:
             "max_score": 2,
             "evidence": [],
         }
+        weighted_total += score * dim["weight"]
 
     return {
         "scores": dim_results,
-        "weighted_total": 0.0,
+        "weighted_total": round(weighted_total, 3),
         "overall_summary": "(解析失败，请查看原始输出)",
         "top_strengths": [],
         "top_weaknesses": [],

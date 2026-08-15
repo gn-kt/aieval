@@ -171,7 +171,10 @@ def run_text_evaluation(self, description: str, n_competitors: int = 3) -> dict:
 
         for key, dim in DIMENSIONS.items():
             s = scores.get(key, {})
-            score = int(s.get("score", 0)) if isinstance(s, dict) else 0
+            try:
+                score = max(0, min(2, int(s.get("score", 0)))) if isinstance(s, dict) else 0
+            except (TypeError, ValueError):
+                score = 0
             evaluation["scores"][key] = {
                 "name": dim["name"],
                 "name_en": dim["name_en"],
