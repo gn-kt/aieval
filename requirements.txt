@@ -3,9 +3,15 @@ uvicorn[standard]
 sqlalchemy
 alembic
 asyncpg
+psycopg2-binary
 celery
 redis
 python-dotenv
 pydantic
 slowapi
 httpx
+
+# 测试依赖（pytest / pytest-asyncio / fakeredis）
+pytest
+pytest-asyncio
+fakeredis

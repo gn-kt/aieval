@@ -1,6 +1,7 @@
 """GitHub API 采集器 —— 获取项目 README / Issues / Commits 元数据。"""
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from config import GITHUB_TOKEN, GITHUB_VERIFY_SSL
@@ -104,6 +105,8 @@ def collect_repo(repo_url: str) -> RepoMeta:
     meta.license_name = (repo_data.get("license") or {}).get("spdx_id", "")
     meta.created_at = (repo_data.get("created_at") or "")[:10]
     meta.updated_at = (repo_data.get("updated_at") or "")[:10]
+    # 最后代码活动时间用 pushed_at 兜底（即使 90 天内无 commit，可持续性判断仍有效）
+    meta.last_commit_at = (repo_data.get("pushed_at") or "")[:10]
 
     readme_data = _get(f"/repos/{full_name}/readme")
     if readme_data:
@@ -113,29 +116,32 @@ def collect_repo(repo_url: str) -> RepoMeta:
         except Exception:
             pass
 
-    commits_data = _get(f"/repos/{full_name}/commits?per_page=100")
+    # 活跃天数必须限定在最近 90 天内统计，否则高频项目会被误判为“不活跃”
+    since_90d = (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    commits_data = _get(f"/repos/{full_name}/commits?since={since_90d}&per_page=100")
     if commits_data and isinstance(commits_data, list):
         meta.recent_commits_count = len(commits_data)
         commit_dates: set[str] = set()
-        latest_ts = ""
         for c in commits_data:
             date_str = (c.get("commit", {}).get("committer", {}).get("date", "") or "")[:10]
             if date_str:
                 commit_dates.add(date_str)
-            if not latest_ts:
-                latest_ts = date_str
         meta.commit_days_active_90d = len(commit_dates)
-        meta.last_commit_at = latest_ts
 
+    # 关闭率统一用 Search API 的 type:issue 口径（open/closed 均不含 PR），
+    # 避免与 repo 元数据的 open_issues_count（含 PR）混算导致系统性偏低
+    open_count = 0
     closed_count = 0
     for state in ("open", "closed"):
         issues_data = _get(f"/search/issues?q=repo:{full_name}+type:issue+state:{state}&per_page=1")
         if issues_data:
-            meta.open_issue_stats[state] = issues_data.get("total_count", 0)
+            total_count = issues_data.get("total_count", 0)
+            meta.open_issue_stats[state] = total_count
             if state == "closed":
-                closed_count = issues_data.get("total_count", 0)
-    if meta.open_issues:
-        total = meta.open_issues + closed_count
-        meta.open_issue_stats["close_rate"] = round(closed_count / total * 100, 1) if total > 0 else 0
+                closed_count = total_count
+            else:
+                open_count = total_count
+    total_issues = open_count + closed_count
+    meta.open_issue_stats["close_rate"] = round(closed_count / total_issues * 100, 1) if total_issues > 0 else 0
 
     return meta

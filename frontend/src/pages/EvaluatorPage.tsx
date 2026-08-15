@@ -72,6 +72,9 @@ export default function EvaluatorPage() {
 
   const handleSubmit = async () => {
     if (waiting) return;
+    if (mode === 'github' && !repoUrl.trim()) { setError('请输入仓库地址'); return; }
+    if (mode === 'text' && !textInput.trim()) { setError('请输入产品描述'); return; }
+    if (mode === 'file' && files.length === 0) { setError('请选择文件'); return; }
     setError(''); setReport(null); setChatMsgs([]); setWaiting(true);
     try {
       if (mode === 'file') {
@@ -80,11 +83,11 @@ export default function EvaluatorPage() {
         const res = await client.post<TaskCreateResponse>('/evaluator/analyze-text', { description: content, n_competitors: 3 });
         setEvalRepoUrl('file://' + Date.now()); pollForResult(res.data.task_id);
       } else if (mode === 'text') {
-        const txt = textInput.trim(); if (!txt) return;
+        const txt = textInput.trim();
         const res = await client.post<TaskCreateResponse>('/evaluator/analyze-text', { description: txt, n_competitors: 3 });
         setEvalRepoUrl('text://' + Date.now()); pollForResult(res.data.task_id);
       } else {
-        const url = repoUrl.trim(); if (!url) return;
+        const url = repoUrl.trim();
         const res = await client.post<TaskCreateResponse>('/evaluator/analyze', { repo_url: url, description: description.trim() || null, n_competitors: 5 });
         setEvalRepoUrl(url); pollForResult(res.data.task_id);
       }
