@@ -195,7 +195,18 @@ export default function EvaluatorPage() {
         {waiting ? '评测中...' : '开始评测'}
       </button>
 
-      {waiting && <div style={s.waiting}><div style={s.spinner} /><span>正在评测，大约需要 30-90 秒...</span></div>}
+      {waiting && (
+        <div role="status" aria-live="polite" style={s.waiting}>
+          <div style={s.waitSpinner}>
+            <div className="af-spin" style={s.waitRingOuter}>
+              <div className="af-spin-reverse" style={s.waitRingMid}>
+                <div className="af-pulse" style={s.waitDot} />
+              </div>
+            </div>
+          </div>
+          <span>正在评测，大约需要 30-90 秒...</span>
+        </div>
+      )}
       {error && <div style={s.error}>{error}</div>}
 
       {/* 历史记录 */}
@@ -367,8 +378,11 @@ const s: Record<string, React.CSSProperties> = {
   label: { display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4, color: '#333' },
   input: { width: '100%', padding: '8px 12px', border: '1px solid #ddd', borderRadius: 6, fontSize: 14, outline: 'none', boxSizing: 'border-box' },
   btn: { width: '100%', padding: '10px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, cursor: 'pointer', fontWeight: 600 },
-  waiting: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', color: '#666', fontSize: 13 },
-  spinner: { width: 18, height: 18, border: '3px solid #eee', borderTop: '3px solid #1a1a2e', borderRadius: '50%', display: 'inline-block' },
+  waiting: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#fff', border: '1px solid #e8e8f0', borderRadius: 8, marginBottom: 12, color: '#666', fontSize: 13, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
+  waitSpinner: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, flexShrink: 0 },
+  waitRingOuter: { width: 40, height: 40, borderRadius: '50%', border: '3px solid #e8e8f0', borderTopColor: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  waitRingMid: { width: 26, height: 26, borderRadius: '50%', border: '2px solid #dcdce8', borderBottomColor: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  waitDot: { width: 8, height: 8, borderRadius: '50%', background: '#1a1a2e' },
   error: { background: '#fff0f0', color: '#c00', padding: '12px 16px', borderRadius: 6, fontSize: 13, marginBottom: 12 },
   toggleLink: { background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '2px 0', fontWeight: 600 },
   historyBox: { marginTop: 8, display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 300, overflow: 'auto', background: '#fff', padding: 8, borderRadius: 6, border: '1px solid #eee' },

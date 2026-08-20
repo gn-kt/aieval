@@ -8,3 +8,27 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* ---- 评测等待动画 ---- */
+@keyframes af-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes af-spin-reverse {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes af-pulse {
+  0%, 100% { transform: scale(0.8); opacity: 0.45; }
+  50% { transform: scale(1.2); opacity: 1; }
+}
+
+.af-spin { animation: af-spin 1.1s linear infinite; }
+.af-spin-reverse { animation: af-spin-reverse 1.8s linear infinite; }
+.af-pulse { animation: af-pulse 1.2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .af-spin,
+  .af-spin-reverse,
+  .af-pulse { animation: none; }
+}
